@@ -1,1 +1,1 @@
-# helentabular
+# Language Game Project @modulabs
