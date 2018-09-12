@@ -26,13 +26,13 @@ from models.dqn.drqn import LSTM_Representer, DRQN
 
 
 # Training
-BATCH_SIZE = 5#32
-SEQUENCE_LENGTH = 3#8
+BATCH_SIZE = 32
+SEQUENCE_LENGTH = 8
 
 # Embedding
-WORD_EMB_SIZE = 2#20
-SENTENCE_EMB_SIZE = 6#100
-LSTM_HIDDEN_SIZE = 4#64
+WORD_EMB_SIZE = 20
+SENTENCE_EMB_SIZE = 100
+LSTM_HIDDEN_SIZE = 64
 
 
 parser = argparse.ArgumentParser(description='DRQN Configuration')
@@ -54,7 +54,7 @@ parser.add_argument('--seed', default=111, type=int, help='random seed')
 parser.set_defaults(clip=True, load_latest=True, record=False, inspect=False)
 #parser: argparse.Namespace = parser.parse_args()   # code for python 3.6
 args = parser.parse_args()
-#print(args.model)
+
 
 
 # Random Seed
@@ -66,7 +66,6 @@ np.random.seed(args.seed)
 logger = logging.getLogger('DQN')
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(message)s')
-#file_handler = logging.FileHandler(f'dqn_{parser.model}.log')
 file_handler = logging.FileHandler('dqn_{args.model}.log')
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
@@ -74,7 +73,7 @@ logger.addHandler(file_handler)
 cuda = torch.cuda.is_available()
 device = torch.device("cuda" if cuda else "cpu")
 
-filenames_pattern = './../data/textworld/games/customs/obj_10_qlen_3_room_2/game_?.ulx'
+filenames_pattern = './../data/textworld/games/customs/obj_10_qlen_3_room_2/game_*.ulx'
 train_games = glob.glob(filenames_pattern)
 
 def main(args):
@@ -89,84 +88,6 @@ def main(args):
         agent.play()
     elif args.mode.lower() == 'train':
         agent.train(train_games, dictionary, max_step=40, max_epoch=2)
-
-        '''drqn = DRQN(word_dim=WORD_EMB_SIZE, sentence_dim=SENTENCE_EMB_SIZE, lstm_dim=LSTM_HIDDEN_SIZE, dictionary=dictionary, device=device)
-
-
-        # TODO : 이하는 개발도중 모듈테스트를 위한 코드..
-        batch = agent.replay.sample(BATCH_SIZE, sequence_length = SEQUENCE_LENGTH, prioritize_sample=False)
-        for transition_seq in batch:
-            print('==================================')
-            for transition in transition_seq:
-                print('-------------------')
-                print(transition.episode)
-                print(transition.observation)
-                print(transition.action)
-
-        next_hidden_state, next_cell_state = drqn.init_states(BATCH_SIZE, LSTM_HIDDEN_SIZE)
-        for idx in range(SEQUENCE_LENGTH):
-            sen_seq = [transition_seq[idx].observation + ' ' + transition_seq[idx].action for transition_seq in batch ]
-            print('SEQUENCE=', idx)
-            for sentence in sen_seq:
-                print(sentence)
-
-            X, X_len = dictionary.sentence_to_lookup_tensor(sen_seq, device)
-
-            print(X)
-            print(X_len)
-
-            q_verb_val, q_object_val, next_hidden_state, next_cell_state = drqn(X, X_len, next_hidden_state, next_cell_state)
-            print('########## Q_VALS ##############')
-            print(q_verb_val)
-            print(q_object_val)
-
-            _, act_idx = q_object_val.max(1)
-            print(act_idx)'''
-
-        '''lstm_rep = LSTM_Representer(3, 4, dictionary, device)
-C = lstm_rep(X, X_len)
-
-print(C)
-print(C.size())
-#print(C_rev)
-#print(C_rev.size())
-
-print('....................................')
-C = C.view(1, 5, -1)
-print(C)
-print(C.size())
-
-lstm = nn.LSTM(4, 6, 1).to(device)
-h, (next_hidden_state, next_cell_state) = lstm(C)
-
-print(h)
-print(h.size())
-print(next_hidden_state)
-print(next_hidden_state.size())
-print(next_cell_state)
-print(next_cell_state.size())
-
-print('>>>>>>>>>>>>>>>')
-h = h.view(5, -1)
-print(h)
-print(h.size())
-
-print('+++++++++++++++++')
-q_func = nn.Linear(6, 2).to(device)
-q_val = q_func(h)
-
-print(q_val)
-print(q_val.size())'''
-
-
-        #emb =
-
-        '''for idx in range(8):    
-            print('==================================')
-            print('SEQ : ', idx)
-            sentence_list = []'''
-
-
 
 if __name__ == '__main__':
     main(args)

@@ -51,10 +51,6 @@ class LSTM_Representer(nn.Module):
         seq_tensor = X[perm_idx]
         seq_tensor = seq_tensor.transpose(0, 1)
         seq_tensor = self.word_embedding(seq_tensor)
-        #print(seq_tensor)
-        print(seq_lengths)
-        print(self.dictionary.dictionary_size())
-        print(self.word_embedding.num_embeddings)
         packed_input = pack_padded_sequence(seq_tensor, seq_lengths.cpu().numpy())
         packed_output, _ = self.lstm(packed_input)
         output, _ = pad_packed_sequence(packed_output)
@@ -96,12 +92,14 @@ class DRQN(nn.Module):
         self.q_object = nn.Linear(lstm_dim, self.n_actions).to(device)
         self.hidden_state = None
         self.cell_state = None
-        #self.device = device
+        self.device = device
+
 
     def init_states(self, batch_size, lstm_dim):
         hidden_state = Variable(torch.zeros(self.layer_num, batch_size, lstm_dim).to(self.device))
         cell_state = Variable(torch.zeros(self.layer_num, batch_size, lstm_dim).to(self.device))
         return hidden_state, cell_state
+
 
     def forward(self, x, x_len, hidden_state, cell_state):
         sentence_representations = self.sentence_representer(x, x_len)
@@ -127,12 +125,8 @@ class DRQN(nn.Module):
             ori_q_object_bias = self.q_object.state_dict()['bias']
             ori_num_actions = self.num_actions
             new_num_actions = self.dictionary.action_size()
-            #print('---extend_q_actions---')
-            #print(ori_q_verb_weight.size())
 
-            #new_q_verb_weight = nn.Parameter(torch.Tensor(self.lstm_dim, new_num_actions))
             new_q_verb_weight = nn.Parameter(torch.Tensor(new_num_actions, self.lstm_dim))
-            #print(new_q_verb_weight.size())
             new_q_verb_weight.data.normal_(0, 1)
             new_q_verb_weight[:ori_num_actions, :] = ori_q_verb_weight  # 기존에 학습된 임베딩 파라미터값은 보존해 준다.
             new_q_verb_bias = nn.Parameter(torch.Tensor(new_num_actions))
@@ -149,27 +143,9 @@ class DRQN(nn.Module):
             del self.q_verb
             del self.q_object
 
-            self.num_actions = new_num_actions #self.dictionary.action_size()
+            self.num_actions = new_num_actions # self.dictionary.action_size()
 
             self.q_verb = nn.Linear(self.lstm_dim, new_num_actions).to(self.device)
             self.q_verb.load_state_dict({'weight': new_q_verb_weight, 'bias':new_q_verb_bias})
             self.q_object = nn.Linear(self.lstm_dim, new_num_actions).to(self.device)
             self.q_object.load_state_dict({'weight': new_q_object_weight, 'bias': new_q_object_bias})
-
-
-
-
-'''
-ori_weight = self.embedding.state_dict()['weight']
-        ori_num_embeddings = self.num_embeddings
-        new_num_embeddings = num_embeddings
-
-        new_weight = nn.Parameter(torch.Tensor(new_num_embeddings, self.embedding_dim))
-        new_weight.data.normal_(0, 1)
-        new_weight[:ori_num_embeddings, :] = ori_weight   # 기존에 학습된 임베딩 파라미터값은 보존해 준다.
-
-        del self.embedding   # 사용했던 이전의 embedding은 지워주자.
-
-        self.num_embeddings = num_embeddings
-        self.embedding = nn.Embedding(self.num_embeddings, self.embedding_dim, padding_idx=0).to(self.device)
-        self.embedding.load_state_dict({'weight':new_weight})'''

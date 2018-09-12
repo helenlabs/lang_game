@@ -55,17 +55,21 @@ class Dictionary:
     def sentence_to_lookup_tensor(self, X, device):
         # 영어문장 전처리 : 줄바꿈 제거, 소문자화, 특수문자 제거
         # TODO : 이 전처리는 일반적이지 않을 수 있으니 차후 변경 검토할 것.
-        X = [self.strip_punctuation(x.lower()) for x in X]
+        X = [self.strip_punctuation(x.lower()).split() for x in X]
 
         for sentence in X:
-            #print(sentence)
-            self.add_sentence(sentence)
-            #print(self.word2count)
+            for word in sentence:
+                if word not in self.word2index:
+                    print('########### UNKNOWN WORD ASSERT !! ############')
+                    print('sentence :', sentence)
+                    print('word : ', word)
+                    print(X)
+                    assert(False)
 
-        X = [x.split() for x in X]
-        X = [[self.word2index[word] for word in sentence_list] for sentence_list in X]
+        X = [[self.word2index[word] for word in sentence] for sentence in X]
 
-        # zero padding
+        # zero padding -> batch X에 포함된 sentence들의 길이가 각각 다르므로,
+        # 일단은 zero padding을 거쳐 동일한 길이로 만들어 lookup tensor를 생성한다.
         X_len = [len(word_seq) for word_seq in X]
         X_seq_len = max(X_len)
         X = [[0 if idx >= len(word_seq) else word_seq[idx] for idx in range(X_seq_len)] for word_seq in X]
@@ -83,6 +87,14 @@ class Dictionary:
 
     def strip_punctuation(self, s):
         return ''.join(c for c in s if c not in punctuation and c != '\n')  # 줄바꿈도 여기서 제거
+
+
+    def get_action_idx_from_word(self, word):
+        idx = self.word2index[self.strip_punctuation(word.lower())]
+        if idx in self.index2action:
+            return self.index2action[idx]
+        else:
+            return 0  # 예외적인 상황..
 
 
 
