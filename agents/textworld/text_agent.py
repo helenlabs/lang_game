@@ -1,4 +1,5 @@
 import os
+import copy
 import math
 import numpy as np
 import torch
@@ -17,24 +18,31 @@ EPSILON_START = 1.0
 EPSILON_END = 0.2
 EPSILON_DECAY = 1000
 
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-5
 
 # Gamma
-GAMMA_DQN = 0.9
+GAMMA_DQN = 0.1
 GAMMA_BONUS = 0.5
 
 # Training
-BATCH_SIZE = 32
+BATCH_SIZE = 5
+SEQUENCE_LENGTH = 2
+TRAIN_LENGTH = 1
+
+# Embedding
+WORD_EMB_SIZE = 2
+SENTENCE_EMB_SIZE = 4
+LSTM_HIDDEN_SIZE = 3
+
+
+'''BATCH_SIZE = 32
 SEQUENCE_LENGTH = 8
 TRAIN_LENGTH = 4
 
 # Embedding
 WORD_EMB_SIZE = 20
 SENTENCE_EMB_SIZE = 100
-LSTM_HIDDEN_SIZE = 64
-
-#MAX_STEP=400
-#MAX_EPOCH=10
+LSTM_HIDDEN_SIZE = 64'''
 
 
 class TextworldAgent(textworld.Agent):
@@ -57,35 +65,10 @@ class TextworldAgent(textworld.Agent):
         self.drqn_target = DRQN(word_dim=WORD_EMB_SIZE, sentence_dim=SENTENCE_EMB_SIZE, lstm_dim=LSTM_HIDDEN_SIZE,
                          dictionary=self.dictionary, device=device)
 
-        '''# DQN Model
-        self.dqn_hidden_state = self.dqn_cell_state = None
-        self.target_hidden_state = self.target_cell_state = None
-
-        #self.mode = args.model.lower()
-        #if self.mode == 'dqn':
-        #    self.dqn: DQN = DQN(self.env.action_space)
-        #elif self.mode == 'lstm':
-
-        self.dqn = DRQN().to(device)
-
-        # For Optimization
-        self.dqn_hidden_state, self.dqn_cell_state = self.dqn.init_states()
-        self.target_hidden_state, self.target_cell_state = self.dqn.init_states()
-
-        # For Training Play
-        self.train_hidden_state, self.train_cell_state = self.dqn.init_states()
-
-        # For Validation Play
-        self.test_hidden_state, self.test_cell_state = self.dqn.init_states()
-
-        self.dqn.to(device)
-
-        # DQN Target Model
-        self.target = copy.deepcopy(self.dqn)
-'''
         # Optimizer
         self.optimizer = optim.Adam(self.drqn.parameters(), lr=LEARNING_RATE)
-        self.criterion = nn.MSELoss()
+        self.criterion_verb = nn.MSELoss()
+        self.criterion_object = nn.MSELoss()
 
         # Replay Memory
         self.replay = ReplayMemory(MAX_REPLAY_MEMORY)
@@ -150,28 +133,29 @@ class TextworldAgent(textworld.Agent):
 
         self.reset(env)  # tells the agent a new run is starting.
         game_state = env.reset()  # Start new run.
-        print(game_state)
+        #print(game_state)
 
         total_reward = 0
         reward = 0
         done = False
         for t in range(max_step):
             command = self.random_admissible_act(game_state)  # TODO : random_admissible_act for test
-            print('>> ', command)
+            #print('>> ', command)
 
             next_game_state, reward, done = env.step(command)
-            print(next_game_state)
+            #print(next_game_state)
             total_reward += reward
 
-            self.update_dictionary(dictionary, game_state, next_game_state)
+            if train:
+                self.update_dictionary(dictionary, game_state, next_game_state)
+                self.replay.put(epi_idx, str(game_state), command, reward, done, str(next_game_state))
 
-            self.replay.put(epi_idx, str(game_state), command, reward, done, str(next_game_state))
+                # Every 4 steps, DRQN should learn from a new experience batch
+                # 여기서, 어쩌면 이 타이밍에 배치를 생성할 때 최근 4개의 경험을 꼭 포함하도록 하면 조금 더 좋아질지도 모르겠다.
+                if (t + 1) % 4 == 0:
+                    self.train_batch(dictionary)
+
             game_state = next_game_state
-
-            # Every 4 steps, DRQN should learn from a new experience batch
-            # 여기서, 어쩌면 이 타이밍에 배치를 생성할 때 최근 4개의 경험을 꼭 포함하도록 하면 조금 더 좋아질지도 모르겠다.
-            if (t + 1) % 4 == 0:
-                self.train_batch(dictionary)
 
             if done:
                 break
@@ -186,8 +170,11 @@ class TextworldAgent(textworld.Agent):
 
 
     def copy_to_target(self):
-        self.drqn_target.load_state_dict(self.drqn.state_dict())
+        state_dict = copy.deepcopy(self.drqn.state_dict())
+        self.drqn_target.load_state_dict(state_dict)
+        #self.drqn_target.load_state_dict(self.drqn.state_dict())   # 이렇게 짜면 self.drqn과 self.drqn_target이 파라미터를 공유하잖다!!!
         #self.drqn_target = copy.deepcopy(self.drqn)   # 이렇게 구현해도 된다고..
+        #self.drqn_target.to(self.device)
 
 
     def train_batch(self, dictionary):
@@ -196,7 +183,7 @@ class TextworldAgent(textworld.Agent):
         if(not self.replay.is_available(BATCH_SIZE)):
             return
 
-        batch = self.replay.sample(BATCH_SIZE, sequence_length=SEQUENCE_LENGTH, prioritize_sample=False)
+        batch = self.replay.sample(BATCH_SIZE, sequence_length=SEQUENCE_LENGTH, prioritize_sample=True)
 
         next_hidden_state, next_cell_state \
             = self.drqn.init_states(BATCH_SIZE, LSTM_HIDDEN_SIZE)
@@ -221,7 +208,7 @@ class TextworldAgent(textworld.Agent):
         train_start = False
         for idx in range(SEQUENCE_LENGTH):  # SEQUENCE_LENGTH = 8
             # 길이 8의 transition_seq 중에서 앞부분 길이 4만큼은 모델 업데이트에 활용하지 않는다. (Lample & Chaplot, 2016)
-            if idx < SEQUENCE_LENGTH - TRAIN_LENGTH:
+            if idx < SEQUENCE_LENGTH - TRAIN_LENGTH:  # if idx < 8 - 4
                 with torch.no_grad():
                     _, _, next_hidden_state, next_cell_state, \
                     _, _, next_hidden_state_target, next_cell_state_target \
@@ -242,21 +229,30 @@ class TextworldAgent(textworld.Agent):
                     act_object_idx_seq = [dictionary.get_action_idx_from_word(transition_seq[idx].action.split()[1])
                                           if len(transition_seq[idx].action.split()) > 1 else 0
                                           for transition_seq in batch]
+                    #print(act_verb_idx_seq)
+                    #print(act_object_idx_seq)
 
                     #index2action을 통해 얻어진 action index를 one-hot vector 형태로 치환..
                     labels_verb = torch.LongTensor(act_verb_idx_seq).unsqueeze(1).to(self.device)
                     labels_verb_one_hot = torch.FloatTensor(BATCH_SIZE, dictionary.action_size()).zero_().to(self.device)
                     labels_verb_one_hot.scatter_(1, labels_verb, 1)
+                    #print(labels_verb_one_hot)
 
                     labels_object = torch.LongTensor(act_object_idx_seq).unsqueeze(1).to(self.device)
                     labels_object_one_hot = torch.FloatTensor(BATCH_SIZE, dictionary.action_size()).zero_().to(self.device)
                     labels_object_one_hot.scatter_(1, labels_object, 1)
+                    #print(labels_object_one_hot)
 
                     # 여기까지는 q_values가 각 action별 리스트 형태
                     q_verb_values, q_object_values, next_hidden_state, next_cell_state, \
                     q_verb_values_target, q_object_values_target, next_hidden_state_target, next_cell_state_target \
                         = go_dqrn_one_step(batch, idx, next_hidden_state, next_cell_state,
                                            next_hidden_state_target, next_cell_state_target)
+
+                    #print(q_verb_values)
+                    #print(q_object_values)
+                    #print(q_verb_values_target)
+                    #print(q_object_values_target)
 
                     # 여기서부터는 q_value가 특정 action에 대한 단일값 형태
                     q_verb_value = torch.mul(q_verb_values, labels_verb_one_hot).sum(1)
@@ -267,17 +263,55 @@ class TextworldAgent(textworld.Agent):
                     reward_seq = torch.Tensor([transition_seq[idx].reward for transition_seq in batch]).to(self.device)
                     done_seq = torch.Tensor([0 if transition_seq[idx].done else 1 for transition_seq in batch]).to(self.device)
 
-                    output = q_verb_value + q_object_value
-                    q_target = q_verb_value_target + q_object_value_target
-                    target = reward_seq + GAMMA_DQN*torch.mul(q_target,done_seq)
-                    target.detach_()
-                    loss = self.criterion(output, target)
+                    output1 = q_verb_value
+                    target1 = reward_seq + GAMMA_DQN * torch.mul(q_verb_value_target, done_seq)
+                    target1.detach_()
+                    output2 = q_object_value
+                    target2 = reward_seq + GAMMA_DQN * torch.mul(q_object_value_target, done_seq)
+                    target2.detach_()
+
+                    loss1 = self.criterion_verb(output1, target1)
+                    loss2 = self.criterion_verb(output2, target2)
+                    loss = loss1 + loss2
+
+
+                    #output = q_verb_value + q_object_value
+                    #q_target = q_verb_value_target + q_object_value_target
+                    #target = reward_seq + GAMMA_DQN*torch.mul(q_target,done_seq)
+                    #target.detach_()
+                    #loss = self.criterion(output, target)
                     print('########## LOSS ##############')
-                    print(output)
-                    print(target)
+                    '''print(q_verb_value)
+                    print(q_object_value)
+                    print(reward_seq)
+                    print(done_seq)
+                    print(q_verb_values_target)
+                    print(output1)
+                    print(target1)
+                    print(self.dictionary.action2word)'''
+                    #print(self.drqn.state_dict())
+                    #print(self.drqn_target.state_dict())
+                    #print(output)
+                    #print(target)
+                    #for name, param in self.drqn.named_parameters():
+                    #    print(name)
+                    #    print(param)
+                    #print(self.drqn.sentence_representer.word_embedding.state_dict())
                     print(loss)
                     loss.backward(retain_graph=True)
                     self.optimizer.step()
+                    #print('>>>>>>>>>>after optimizer step')
+                    #print(self.drqn.state_dict())
+                    #print(self.drqn_target.state_dict())
+                    '''print(q_verb_value)
+                    print(q_object_value)
+                    print(output)
+                    print(target)
+                    print(q_verb_values)
+                    print(q_object_values)
+                    print(q_verb_values_target)
+                    print(q_object_values_target)'''
+
 
     # dictionary는 이 메소드 안에서만 확장되어야 한다.
     def update_dictionary(self, dictionary, game_state, next_game_state):
