@@ -21,7 +21,7 @@ EPSILON_DECAY = 1000
 LEARNING_RATE = 1e-5
 
 # Gamma
-GAMMA_DQN = 0.1
+GAMMA_DQN = 0.9
 GAMMA_BONUS = 0.5
 
 # Training
@@ -133,17 +133,18 @@ class TextworldAgent(textworld.Agent):
 
         self.reset(env)  # tells the agent a new run is starting.
         game_state = env.reset()  # Start new run.
-        #print(game_state)
+        print(game_state)
 
         total_reward = 0
         reward = 0
         done = False
         for t in range(max_step):
             command = self.random_admissible_act(game_state)  # TODO : random_admissible_act for test
-            #print('>> ', command)
+            print(game_state.admissible_commands)
+            print('>> ', command)
 
             next_game_state, reward, done = env.step(command)
-            #print(next_game_state)
+            print(next_game_state)
             total_reward += reward
 
             if train:
@@ -297,6 +298,10 @@ class TextworldAgent(textworld.Agent):
                     #    print(name)
                     #    print(param)
                     #print(self.drqn.sentence_representer.word_embedding.state_dict())
+                    print(q_verb_values)
+                    print(q_verb_values_target)
+                    print(q_verb_value)
+                    print(q_verb_value_target)
                     print(loss)
                     loss.backward(retain_graph=True)
                     self.optimizer.step()

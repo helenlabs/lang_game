@@ -44,7 +44,7 @@ parser.add_argument('--no_load_latest', dest='load_latest', action='store_false'
 parser.add_argument('--checkpoint', default=None, type=str, help='specify the checkpoint file name')
 parser.add_argument('--mode', dest='mode', default='train', type=str, help='[play, train]')
 #parser.add_argument('--game', default='FlappyBird-v0', type=str, help='only Pygames are supported')
-parser.add_argument('--game', default='./../data/textworld/games/customs/obj_10_qlen_3_room_2/game_1.ulx', type=str, help='TextWorld games are supported')
+parser.add_argument('--game', default='data/textworld/games/customs/obj_10_qlen_3_room_2/game_1.ulx', type=str, help='TextWorld games are supported')
 parser.add_argument('--clip', dest='clip', action='store_true', help='clipping the delta between -1 and 1')
 parser.add_argument('--noclip', dest='clip', action='store_false', help='not clipping the delta')
 parser.add_argument('--skip_action', default=4, type=int, help='Skipping actions')
@@ -66,14 +66,14 @@ np.random.seed(args.seed)
 logger = logging.getLogger('DQN')
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(message)s')
-file_handler = logging.FileHandler('dqn_{args.model}.log')
+file_handler = logging.FileHandler('data/textworld/logs/dqn_{args.model}.log')
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 
 cuda = torch.cuda.is_available()
 device = torch.device("cuda" if cuda else "cpu")
 
-filenames_pattern = './../data/textworld/games/customs/obj_10_qlen_3_room_2/game_*.ulx'
+filenames_pattern = 'data/textworld/games/customs/obj_10_qlen_3_room_2/game_*.ulx'
 train_games = glob.glob(filenames_pattern)
 
 def main(args):
